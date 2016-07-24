@@ -58,6 +58,7 @@ import socket
 
 
 from listview import ListView
+from BeautifulSoup import BeautifulSoup
 import opds
 import languagenames
 import devicemanager
@@ -85,6 +86,7 @@ class GetIABooksActivity(activity.Activity):
         self.queryresults = None
         self._getter = None
         self.show_images = True
+        self._is_school_server = True
         self.languages = {}
         self._lang_code_handler = languagenames.LanguageNames()
         self.catalogs_configuration = {}
@@ -299,8 +301,69 @@ class GetIABooksActivity(activity.Activity):
         palette.popup(immediate=True, state=palette.SECONDARY)
 
     def __switch_catalog_cb(self, catalog_name):
-        catalog_config = self.catalogs[catalog_name.decode('utf-8')]
-        self.__activate_catalog_cb(None, catalog_config)
+        try:
+            catalog_config = self.catalogs[catalog_name.decode('utf-8')]
+            if not self._is_school_server:
+                self.__activate_catalog_cb(None, catalog_config)
+            else:
+                self._display_schoolserver_bookcat(catalog_config)
+                #print catalog_config  
+        except KeyError:
+            self._display_schoolserver_booklist(str(catalog_name))
+
+    def _display_schoolserver_booklist(self, book_category):
+        if self.catalog_name['name'] == 'rachel':
+
+            f = urllib2.urlopen(self.catalog_name['query_uri'])
+
+            string = f.read()
+
+            soup = BeautifulSoup(string)
+
+
+
+            for i in soup.findAll("li", { "class" : "listhead" }):
+                if i.text == book_category:
+                    #print i["books"]
+                    j = i
+                    rows = []
+                    self.listview.clear()
+                    # Generating the book list in the current category
+                    for index in range(int(j["books"])): 
+                        i = i.findNext("a")
+                        rows.append([str(i.text), '', '', '', '', ''])
+                    self.listview.insertRows(rows)
+            f.close()
+
+
+
+
+
+    def _display_schoolserver_bookcat(self, catalog_name):
+        #self.listview.populate_with_books
+        #html_doc = open(catalog_name['query_uri'],'r').read()
+        self.catalog_name = catalog_name
+        self.listview.clear()
+
+        f = urllib2.urlopen(catalog_name['query_uri'])
+        #print type(f.read())
+        #print f.read()
+        string = f.read()
+
+        soup = BeautifulSoup(string)
+
+        #if len(soup.findAll("li", { "class" : "listhead" })) > 0:
+
+        self.treemodel.clear()
+        for p in soup.findAll("li", { "class" : "listhead" }):
+            self.treemodel.append(p)
+
+        #title = self.catalog_history[len_cat - 1]['title']
+        self.bt_move_up_catalog.set_label(catalog_name['name'])
+        self.bt_move_up_catalog.show_image()
+
+        
+
 
     def __activate_catalog_cb(self, menu, catalog_config):
         query_language = self.get_query_language()
@@ -321,6 +384,7 @@ class GetIABooksActivity(activity.Activity):
 
         self.queryresults = opds.RemoteQueryResult(catalog_config,
                 '', query_language)
+
         self.show_message(_('Performing lookup, please wait...'))
         # README: I think we should create some global variables for
         # each cursor that we are using to avoid the creation of them
@@ -429,6 +493,7 @@ class GetIABooksActivity(activity.Activity):
                     self.path_iter[p['text']] = \
                             self.treemodel.append([p['text']])
             self.catalog_listview.handler_unblock(self._catalog_changed_id)
+            self.listview.clear()
 
     def move_down_catalog(self, treeview):
         treestore, coldex = \
@@ -445,6 +510,7 @@ class GetIABooksActivity(activity.Activity):
             self.catalog_history.append(
                     {'title': treestore.get_value(coldex, 0), 'catalogs': []})
             self.__switch_catalog_cb(treestore.get_value(coldex, 0))
+
 
     def _sort_logfile(self, treemodel, itera, iterb):
         a = treemodel.get_value(itera, 0)
@@ -524,6 +590,7 @@ class GetIABooksActivity(activity.Activity):
         # books listview
         self.listview = ListView(self._lang_code_handler)
         self.listview.connect('selection-changed', self.selection_cb)
+        self.listview.props.activate_on_single_click = True
         self.listview.set_enable_search(False)
 
         self.list_scroller = Gtk.ScrolledWindow(hadjustment=None,
@@ -817,7 +884,6 @@ class GetIABooksActivity(activity.Activity):
             else:
                 self.queryresults = opds.LocalVolumeQueryResult(self.source,
                         search_text, query_language)
-
             self.show_message(_('Performing lookup, please wait...'))
             self.get_window().set_cursor(Gdk.Cursor(Gdk.CursorType.WATCH))
             self.queryresults.connect('updated', self.__query_updated_cb)
@@ -911,15 +977,21 @@ class GetIABooksActivity(activity.Activity):
         # enable/disable catalogs button if configuration is available
         self.source = self._books_toolbar.source_combo.props.value
 
+        if self.source == 'School Server':
+            self._is_school_server = True
+        else: 
+            self._is_school_server = False
+
         # Get catalogs for this source
         self.load_source_catalogs()
+
 
         if len(self.catalogs) > 0:
             self.bt_catalogs.show()
             self.bt_catalogs.set_active(True)
-        else:
-            self.bt_catalogs.set_active(False)
-            self.bt_catalogs.hide()
+        #else:
+        #    self.bt_catalogs.set_active(False)
+        #    self.bt_catalogs.hide()
 
     def __vadjustment_value_changed_cb(self, vadjustment):
 
