@@ -54,6 +54,7 @@ import dbus
 import ConfigParser
 import base64
 import urllib2
+import urlparse
 import socket
 
 
@@ -307,7 +308,6 @@ class GetIABooksActivity(activity.Activity):
                 self.__activate_catalog_cb(None, catalog_config)
             else:
                 self._display_schoolserver_bookcat(catalog_config)
-                #print catalog_config  
         except KeyError:
             self._display_schoolserver_booklist(str(catalog_name))
 
@@ -324,14 +324,17 @@ class GetIABooksActivity(activity.Activity):
 
             for i in soup.findAll("li", { "class" : "listhead" }):
                 if i.text == book_category:
-                    #print i["books"]
                     j = i
                     rows = []
                     self.listview.clear()
                     # Generating the book list in the current category
                     for index in range(int(j["books"])): 
                         i = i.findNext("a")
-                        rows.append([str(i.text), '', '', '', '', ''])
+                        # Appends the Book name and the download url
+                        url = str(self.catalog_name['query_uri']) 
+                        url = str(url.rsplit('/',1)[0]) + '/' + i['href']
+
+                        rows.append([str(i.text), '', str(url), '', '', ''])
                     self.listview.insertRows(rows)
             f.close()
 
@@ -346,8 +349,6 @@ class GetIABooksActivity(activity.Activity):
         self.listview.clear()
 
         f = urllib2.urlopen(catalog_name['query_uri'])
-        #print type(f.read())
-        #print f.read()
         string = f.read()
 
         soup = BeautifulSoup(string)
@@ -701,6 +702,7 @@ class GetIABooksActivity(activity.Activity):
     def selection_cb(self, widget):
         # Testing...
         selected_book = self.listview.get_selected_book()
+        print self.listview.get_selected_ssbook_url()
         if self.source == 'local_books':
             if selected_book:
                 self.download_url = ''
@@ -710,6 +712,15 @@ class GetIABooksActivity(activity.Activity):
                 self._object_id = selected_book.get_object_id()
                 self._show_journal_alert(_('Selected book'),
                         self.selected_title)
+
+        elif self.source == 'School Server':
+            self.clear_downloaded_bytes()
+            self.selected_title = self.listview.getFirstSelectedRow()[0]
+            self.download_url = self.listview.get_selected_ssbook_url()
+            self._download.show()
+            self.show_book_data()
+            
+
         else:
             self.clear_downloaded_bytes()
             if selected_book:
@@ -726,50 +737,64 @@ class GetIABooksActivity(activity.Activity):
         self.msg_label.hide()
 
     def show_book_data(self, load_image=True):
-        self.selected_title = self.selected_book.get_title()
-        book_data = _('Title:\t\t') + self.selected_title + '\n'
-        self.selected_author = self.selected_book.get_author()
-        book_data += _('Author:\t\t') + self.selected_author + '\n'
-        self.selected_publisher = self.selected_book.get_publisher()
-        self.selected_summary = self.selected_book.get_summary()
-        if (self.selected_summary is not 'Unknown'):
-            book_data += _('Summary:\t') + self.selected_summary + '\n'
-        self.selected_language_code = self.selected_book.get_language()
-        if self.selected_language_code != '':
-            try:
-                self.selected_language = \
-                    self._lang_code_handler.get_full_language_name(
-                        self.selected_book.get_language())
-            except:
-                self.selected_language = self.selected_book.get_language()
-            book_data += _('Language:\t') + self.selected_language + '\n'
-        book_data += _('Publisher:\t') + self.selected_publisher + '\n'
-        if self.source != 'local_books':
-            try:
-                self.download_url = self.selected_book.get_download_links()[\
-                        self.format_combo.props.value]
-            except:
-                pass
-        textbuffer = self.textview.get_buffer()
-        textbuffer.set_text('\n' + book_data)
-        self.enable_button(True)
+        if not self.source == 'School Server':
+            self.selected_title = self.selected_book.get_title()
+            book_data = _('Title:\t\t') + self.selected_title + '\n'
+            self.selected_author = self.selected_book.get_author()
+            book_data += _('Author:\t\t') + self.selected_author + '\n'
+            self.selected_publisher = self.selected_book.get_publisher()
+            self.selected_summary = self.selected_book.get_summary()
+            if (self.selected_summary is not 'Unknown'):
+                book_data += _('Summary:\t') + self.selected_summary + '\n'
+            self.selected_language_code = self.selected_book.get_language()
+            if self.selected_language_code != '':
+                try:
+                    self.selected_language = \
+                        self._lang_code_handler.get_full_language_name(
+                            self.selected_book.get_language())
+                except:
+                    self.selected_language = self.selected_book.get_language()
+                book_data += _('Language:\t') + self.selected_language + '\n'
+            book_data += _('Publisher:\t') + self.selected_publisher + '\n'
+            if self.source != 'local_books':
+                try:
+                    self.download_url = self.selected_book.get_download_links()[\
+                            self.format_combo.props.value]
+                except:
+                    pass
+            textbuffer = self.textview.get_buffer()
+            textbuffer.set_text('\n' + book_data)
+            self.enable_button(True)
 
-        # Cover Image
-        self.exist_cover_image = False
-        if self.show_images and load_image:
-            if self.source == 'local_books':
-                cover_image_buffer = self.get_journal_entry_cover_image(
-                        self.selected_book.get_object_id())
-                if (cover_image_buffer):
-                    self.add_image_buffer(
-                        self.get_pixbuf_from_buffer(cover_image_buffer))
+            # Cover Image
+            self.exist_cover_image = False
+            if self.show_images and load_image:
+                if self.source == 'local_books':
+                    cover_image_buffer = self.get_journal_entry_cover_image(
+                            self.selected_book.get_object_id())
+                    if (cover_image_buffer):
+                        self.add_image_buffer(
+                            self.get_pixbuf_from_buffer(cover_image_buffer))
+                    else:
+                        self.add_default_image()
                 else:
+                    url_image = self.selected_book.get_image_url()
                     self.add_default_image()
-            else:
-                url_image = self.selected_book.get_image_url()
-                self.add_default_image()
-                if url_image:
-                    self.download_image(url_image.values()[0])
+                    if url_image:
+                        self.download_image(url_image.values()[0])
+
+        # Details for the books on School Server
+        else:
+            self.selected_language = ''
+            self.selected_language_code = ''
+            self.selected_summary = ''
+            self.selected_publisher = ''
+            self.selected_author = ''
+            book_data = _('Title:\t\t') + self.listview.getFirstSelectedRow()[0] + '\n'
+            textbuffer = self.textview.get_buffer()
+            textbuffer.set_text('\n' + book_data)
+            self.enable_button(True)
+                            
 
     def get_pixbuf_from_buffer(self, image_buffer):
         """Buffer To Pixbuf"""
@@ -981,6 +1006,10 @@ class GetIABooksActivity(activity.Activity):
             self._is_school_server = True
         else: 
             self._is_school_server = False
+            self.listview.clear()
+            self.bt_move_up_catalog.set_label(_('Catalogs'))
+            self.bt_move_up_catalog.hide_image()
+
 
         # Get catalogs for this source
         self.load_source_catalogs()
@@ -1106,47 +1135,92 @@ class GetIABooksActivity(activity.Activity):
         self._allow_suspend()
 
     def create_journal_entry(self,  tempfile):
-        journal_entry = datastore.create()
-        journal_title = self.selected_title
-        if self.selected_author != '':
-            journal_title = journal_title + ', by ' + self.selected_author
-        journal_entry.metadata['title'] = journal_title
-        journal_entry.metadata['title_set_by_user'] = '1'
-        journal_entry.metadata['keep'] = '0'
-        journal_entry.metadata['mime_type'] = \
-                self.format_combo.props.value
-        # Fix fake mime type for black&white pdfs
-        if journal_entry.metadata['mime_type'] == _MIMETYPES['PDF BW']:
-            journal_entry.metadata['mime_type'] = _MIMETYPES['PDF']
+        if not self.source == 'School Server':
+            journal_entry = datastore.create()
+            journal_title = self.selected_title
+            if self.selected_author != '':
+                journal_title = journal_title + ', by ' + self.selected_author
+            journal_entry.metadata['title'] = journal_title
+            journal_entry.metadata['title_set_by_user'] = '1'
+            journal_entry.metadata['keep'] = '0'
+            journal_entry.metadata['mime_type'] = \
+                    self.format_combo.props.value
+            # Fix fake mime type for black&white pdfs
+            if journal_entry.metadata['mime_type'] == _MIMETYPES['PDF BW']:
+                journal_entry.metadata['mime_type'] = _MIMETYPES['PDF']
 
-        journal_entry.metadata['buddies'] = ''
-        journal_entry.metadata['icon-color'] = profile.get_color().to_string()
-        textbuffer = self.textview.get_buffer()
-        journal_entry.metadata['description'] = \
-            textbuffer.get_text(textbuffer.get_start_iter(),
-                                textbuffer.get_end_iter(), True)
-        if self.exist_cover_image:
-            image_buffer = self._get_preview_image_buffer()
-            journal_entry.metadata['preview'] = dbus.ByteArray(image_buffer)
-            image_buffer = self._get_cover_image_buffer()
-            journal_entry.metadata['cover_image'] = \
-                dbus.ByteArray(base64.b64encode(image_buffer))
+            journal_entry.metadata['buddies'] = ''
+            journal_entry.metadata['icon-color'] = profile.get_color().to_string()
+            textbuffer = self.textview.get_buffer()
+            journal_entry.metadata['description'] = \
+                textbuffer.get_text(textbuffer.get_start_iter(),
+                                    textbuffer.get_end_iter(), True)
+            if self.exist_cover_image:
+                image_buffer = self._get_preview_image_buffer()
+                journal_entry.metadata['preview'] = dbus.ByteArray(image_buffer)
+                image_buffer = self._get_cover_image_buffer()
+                journal_entry.metadata['cover_image'] = \
+                    dbus.ByteArray(base64.b64encode(image_buffer))
+            else:
+                journal_entry.metadata['cover_image'] = ""
+
+            journal_entry.metadata['tags'] = self.source
+            journal_entry.metadata['source'] = self.source
+            journal_entry.metadata['author'] = self.selected_author
+            journal_entry.metadata['publisher'] = self.selected_publisher
+            journal_entry.metadata['summary'] = self.selected_summary
+            journal_entry.metadata['language'] = self.selected_language_code
+
+            journal_entry.file_path = tempfile
+            datastore.write(journal_entry)
+            os.remove(tempfile)
+            self.progressbox.hide()
+            self._object_id = journal_entry.object_id
+            self._show_journal_alert(_('Download completed'), self.selected_title)
+
         else:
+            journal_entry = datastore.create()
+            journal_title = self.selected_title
+            if self.selected_author != '':
+                journal_title = journal_title + ', by ' + self.selected_author
+            journal_entry.metadata['title'] = journal_title
+            journal_entry.metadata['title_set_by_user'] = '1'
+            journal_entry.metadata['keep'] = '0'
+            journal_entry.metadata['mime_type'] = \
+                    self.format_combo.props.value
+            # Fix fake mime type for black&white pdfs
+            if journal_entry.metadata['mime_type'] == _MIMETYPES['PDF BW']:
+                journal_entry.metadata['mime_type'] = _MIMETYPES['PDF']
+
+            journal_entry.metadata['buddies'] = ''
+            journal_entry.metadata['icon-color'] = profile.get_color().to_string()
+            textbuffer = self.textview.get_buffer()
+            journal_entry.metadata['description'] = \
+                textbuffer.get_text(textbuffer.get_start_iter(),
+                                    textbuffer.get_end_iter(), True)
+            '''if self.exist_cover_image:
+                image_buffer = self._get_preview_image_buffer()
+                journal_entry.metadata['preview'] = dbus.ByteArray(image_buffer)
+                image_buffer = self._get_cover_image_buffer()
+                journal_entry.metadata['cover_image'] = \
+                    dbus.ByteArray(base64.b64encode(image_buffer))
+            else:'''
             journal_entry.metadata['cover_image'] = ""
 
-        journal_entry.metadata['tags'] = self.source
-        journal_entry.metadata['source'] = self.source
-        journal_entry.metadata['author'] = self.selected_author
-        journal_entry.metadata['publisher'] = self.selected_publisher
-        journal_entry.metadata['summary'] = self.selected_summary
-        journal_entry.metadata['language'] = self.selected_language_code
+            journal_entry.metadata['tags'] = self.source
+            journal_entry.metadata['source'] = self.source
+            journal_entry.metadata['author'] = self.selected_author
+            journal_entry.metadata['publisher'] = self.selected_publisher
+            journal_entry.metadata['summary'] = self.selected_summary
+            journal_entry.metadata['language'] = self.selected_language_code
 
-        journal_entry.file_path = tempfile
-        datastore.write(journal_entry)
-        os.remove(tempfile)
-        self.progressbox.hide()
-        self._object_id = journal_entry.object_id
-        self._show_journal_alert(_('Download completed'), self.selected_title)
+            journal_entry.file_path = tempfile
+            datastore.write(journal_entry)
+            os.remove(tempfile)
+            self.progressbox.hide()
+            self._object_id = journal_entry.object_id
+            self._show_journal_alert(_('Download completed'), self.selected_title)
+
 
     def _show_journal_alert(self, title, msg):
         _stop_alert = Alert()

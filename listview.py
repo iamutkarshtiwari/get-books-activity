@@ -93,3 +93,11 @@ class ListView(ExtListView):
         except IndexError:
             ret = None
         return ret
+
+    def get_selected_ssbook_url(self):
+        try:
+            ret = self.getFirstSelectedRow()[2]
+        except IndexError:
+            ret = None
+        return ret
+        
