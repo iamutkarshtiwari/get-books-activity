@@ -312,7 +312,6 @@ class GetIABooksActivity(activity.Activity):
             self._display_schoolserver_booklist(str(catalog_name))
 
     def _display_schoolserver_booklist(self, book_category):
-        print 'hell yeah'
         if self.catalog_name['name'] == 'rachel':
             f = urllib2.urlopen(self.catalog_name['query_uri'])
             string = f.read()
@@ -334,29 +333,73 @@ class GetIABooksActivity(activity.Activity):
                     self.listview.insertRows(rows)
             f.close()
 
-        if self.catalog_name['name'] == 'Gutenberg':
-            print 'hehe'   
+        if self.catalog_name['name'] == 'gutenberg':
+
+            f = urllib2.urlopen(self.catalog_name['query_uri'])
+            string = f.read()
+            soup = BeautifulSoup(string)
+            f.close()
+
+            # Extracting the genre's url
+            url = self.catalog_name['query_uri']
+            href = (soup.find('a', text=book_category).parent)['href']
+            url = str(url.rsplit('/',1)[0]) + '/' + href
+
+            f = urllib2.urlopen(url)
+            string = f.read()
+            soup = BeautifulSoup(string)
+            f.close()
+
+            self.listview.clear()
+            rows = []
+            for p in ((soup.find('ul')).findAll('b')):
+                book_url = str((self.catalog_name['query_uri']).rsplit('/',1)[0]) + '/' 
+                rows.append([str(p.text), '', '', '' ,'' ,''])
+            self.listview.insertRows(rows)
+
+
+            
 
 
     def _display_schoolserver_bookcat(self, catalog_name):
+        self.listview.clear()
+        self.treemodel.clear()
+        
+        self.clear_downloaded_bytes()
+        self.catalog_name = catalog_name
         if catalog_name['name'] == 'rachel':
-            self.catalog_name = catalog_name
-            self.listview.clear()
+            
 
             f = urllib2.urlopen(catalog_name['query_uri'])
             string = f.read()
 
             soup = BeautifulSoup(string)
 
-            self.listview.clear()
             for p in soup.findAll("li", { "class" : "listhead" }):
                 self.treemodel.append(p)
 
             self.bt_move_up_catalog.set_label(catalog_name['name'])
             self.bt_move_up_catalog.show_image()
+            f.close()
 
         elif catalog_name['name'] == 'gutenberg':
-            print 'John snow'
+
+            f = urllib2.urlopen(catalog_name['query_uri'])
+            string = f.read()
+
+            soup = BeautifulSoup(string)
+
+            #for p in soup.findAll("li", { "class" : "listhead" }):
+
+            for p in ((soup.find('ul')).findAll('a')):
+            #soup = soup.find('ul')
+            #print soup.findAll('a')
+
+                self.treemodel.append(p)
+            self.bt_move_up_catalog.set_label(catalog_name['name'])
+            self.bt_move_up_catalog.show_image()
+            f.close()
+
 
         
 
