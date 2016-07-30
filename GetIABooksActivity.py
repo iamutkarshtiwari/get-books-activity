@@ -312,15 +312,11 @@ class GetIABooksActivity(activity.Activity):
             self._display_schoolserver_booklist(str(catalog_name))
 
     def _display_schoolserver_booklist(self, book_category):
+        print 'hell yeah'
         if self.catalog_name['name'] == 'rachel':
-
             f = urllib2.urlopen(self.catalog_name['query_uri'])
-
             string = f.read()
-
             soup = BeautifulSoup(string)
-
-
 
             for i in soup.findAll("li", { "class" : "listhead" }):
                 if i.text == book_category:
@@ -338,30 +334,29 @@ class GetIABooksActivity(activity.Activity):
                     self.listview.insertRows(rows)
             f.close()
 
-
-
+        if self.catalog_name['name'] == 'Gutenberg':
+            print 'hehe'   
 
 
     def _display_schoolserver_bookcat(self, catalog_name):
-        #self.listview.populate_with_books
-        #html_doc = open(catalog_name['query_uri'],'r').read()
-        self.catalog_name = catalog_name
-        self.listview.clear()
+        if catalog_name['name'] == 'rachel':
+            self.catalog_name = catalog_name
+            self.listview.clear()
 
-        f = urllib2.urlopen(catalog_name['query_uri'])
-        string = f.read()
+            f = urllib2.urlopen(catalog_name['query_uri'])
+            string = f.read()
 
-        soup = BeautifulSoup(string)
+            soup = BeautifulSoup(string)
 
-        #if len(soup.findAll("li", { "class" : "listhead" })) > 0:
+            self.listview.clear()
+            for p in soup.findAll("li", { "class" : "listhead" }):
+                self.treemodel.append(p)
 
-        self.treemodel.clear()
-        for p in soup.findAll("li", { "class" : "listhead" }):
-            self.treemodel.append(p)
+            self.bt_move_up_catalog.set_label(catalog_name['name'])
+            self.bt_move_up_catalog.show_image()
 
-        #title = self.catalog_history[len_cat - 1]['title']
-        self.bt_move_up_catalog.set_label(catalog_name['name'])
-        self.bt_move_up_catalog.show_image()
+        elif catalog_name['name'] == 'gutenberg':
+            print 'John snow'
 
         
 
@@ -702,7 +697,6 @@ class GetIABooksActivity(activity.Activity):
     def selection_cb(self, widget):
         # Testing...
         selected_book = self.listview.get_selected_book()
-        print self.listview.get_selected_ssbook_url()
         if self.source == 'local_books':
             if selected_book:
                 self.download_url = ''
