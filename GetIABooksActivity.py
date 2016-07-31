@@ -352,9 +352,12 @@ class GetIABooksActivity(activity.Activity):
 
             self.listview.clear()
             rows = []
-            for p in ((soup.find('ul')).findAll('b')):
-                book_url = str((self.catalog_name['query_uri']).rsplit('/',1)[0]) + '/' 
-                rows.append([str(p.text), '', '', '' ,'' ,''])
+            soup = soup.find('ul')
+            for book_name, book_auth, book_sum, book_img, book_url in zip(soup.findAll('b'), soup.findAll('small'), soup.findAll('p'), soup.findAll('img'), soup.findAll('a')):
+                book_url = str((self.catalog_name['query_uri']).rsplit('/',1)[0]) + '/' + book_url['href']
+                book_img = str((self.catalog_name['query_uri']).rsplit('/',1)[0]) + '/' + book_img['src']
+
+                rows.append([str(book_name.text), str(book_auth.text), str(book_url), str(book_sum.text) ,str(book_img) ,''])
             self.listview.insertRows(rows)
 
 
@@ -392,8 +395,6 @@ class GetIABooksActivity(activity.Activity):
             #for p in soup.findAll("li", { "class" : "listhead" }):
 
             for p in ((soup.find('ul')).findAll('a')):
-            #soup = soup.find('ul')
-            #print soup.findAll('a')
 
                 self.treemodel.append(p)
             self.bt_move_up_catalog.set_label(catalog_name['name'])
@@ -754,6 +755,7 @@ class GetIABooksActivity(activity.Activity):
             self.clear_downloaded_bytes()
             self.selected_title = self.listview.getFirstSelectedRow()[0]
             self.download_url = self.listview.get_selected_ssbook_url()
+            print self.download_url
             self._download.show()
             self.show_book_data()
             
@@ -822,16 +824,39 @@ class GetIABooksActivity(activity.Activity):
 
         # Details for the books on School Server
         else:
-            self.selected_language = ''
-            self.selected_language_code = ''
-            self.selected_summary = ''
-            self.selected_publisher = ''
-            self.selected_author = ''
-            book_data = _('Title:\t\t') + self.listview.getFirstSelectedRow()[0] + '\n'
+            self.add_default_image()
+            if self.catalog_name['name'] == 'rachel':
+                self.selected_language = 'Unknown'
+                self.selected_language_code = ''
+                self.selected_summary = 'Unknown'
+                self.selected_publisher = 'Unknown'
+                self.selected_author = 'Unknown'
+                book_data = _('Title:\t\t') + self.listview.getFirstSelectedRow()[0] + '\n'
+                textbuffer = self.textview.get_buffer()
+                textbuffer.set_text('\n' + book_data)
+                self.enable_button(True)
+            elif self.catalog_name['name'] == 'gutenberg':
+                self.selected_language = 'Unknown'
+                self.selected_language_code = ''
+                self.selected_summary = self.listview.getFirstSelectedRow()[3]
+                self.selected_publisher = 'Unknown'
+                self.selected_author = self.listview.getFirstSelectedRow()[1]
+                book_data = _('Title:\t\t') + self.listview.getFirstSelectedRow()[0] + '\n'
+                self.download_image(self.listview.getFirstSelectedRow()[4])
+
+            if self.selected_author is not 'Unknown':                
+                book_data += _('Author:\t\t') + self.selected_author + '\n'            
+            if self.selected_language is not 'Unknown':
+                book_data += _('Language:\t') + self.selected_language + '\n'
+            if self.selected_publisher is not 'Unknown':
+                book_data += _('Publisher:\t') + self.selected_publisher + '\n'
+            if self.selected_summary is not 'Unknown':
+                book_data += '\n' + _('Summary:\t') + self.selected_summary + '\n'
             textbuffer = self.textview.get_buffer()
             textbuffer.set_text('\n' + book_data)
             self.enable_button(True)
-                            
+
+                   
 
     def get_pixbuf_from_buffer(self, image_buffer):
         """Buffer To Pixbuf"""
@@ -1047,17 +1072,15 @@ class GetIABooksActivity(activity.Activity):
             self.bt_move_up_catalog.set_label(_('Catalogs'))
             self.bt_move_up_catalog.hide_image()
 
-
         # Get catalogs for this source
         self.load_source_catalogs()
-
 
         if len(self.catalogs) > 0:
             self.bt_catalogs.show()
             self.bt_catalogs.set_active(True)
-        #else:
-        #    self.bt_catalogs.set_active(False)
-        #    self.bt_catalogs.hide()
+        else:
+            self.bt_catalogs.set_active(False)
+            self.bt_catalogs.hide()
 
     def __vadjustment_value_changed_cb(self, vadjustment):
 
@@ -1119,9 +1142,10 @@ class GetIABooksActivity(activity.Activity):
         self.listview.props.sensitive = True
         self._books_toolbar.search_entry.set_sensitive(True)
         if self._download_content_type.startswith('text/html'):
-            # got an error page instead
-            self._get_book_error_cb(getter, 'HTTP Error')
-            return
+            if not self.source =='School Server':
+                # got an error page instead
+                self._get_book_error_cb(getter, 'HTTP Error')
+                return
         self.process_downloaded_book(tempfile,  suggested_name)
 
     def _get_book_progress_cb(self, getter, bytes_downloaded):
@@ -1223,11 +1247,10 @@ class GetIABooksActivity(activity.Activity):
             journal_entry.metadata['title'] = journal_title
             journal_entry.metadata['title_set_by_user'] = '1'
             journal_entry.metadata['keep'] = '0'
-            journal_entry.metadata['mime_type'] = \
-                    self.format_combo.props.value
-            # Fix fake mime type for black&white pdfs
-            if journal_entry.metadata['mime_type'] == _MIMETYPES['PDF BW']:
-                journal_entry.metadata['mime_type'] = _MIMETYPES['PDF']
+            if self.catalog_name['name'] == 'gutenberg':
+                journal_entry.metadata['mime_type'] = u'text/html'
+            else:     
+                journal_entry.metadata['mime_type'] = u'application/pdf'
 
             journal_entry.metadata['buddies'] = ''
             journal_entry.metadata['icon-color'] = profile.get_color().to_string()
